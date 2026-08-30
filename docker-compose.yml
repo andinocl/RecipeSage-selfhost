@@ -27,6 +27,7 @@ x-common-env: &common-env
   AI_MODEL_ASSISTANT: anthropic/claude-sonnet-4.6 # Use whatever model you prefer
   AI_MODEL_ASSISTANT_LOW: google/gemini-2.5-flash # Use whatever model you prefer
   SCRAPFLY_API_KEY: "" # Can be provided to bypass CloudFlare anti-bot for better clip from URL support. Or, just use the browser extension instead since that grabs the HTML directly from the active webpage.
+  LIBRETRANSLATE_URL: http://libretranslate:5000/ # Powers the EN/ES recipe translation toggle. Points at the libretranslate service below; leave as-is unless you're running your own instance elsewhere.
 
 # === Please do not change any values below this line ===
 
@@ -54,6 +55,8 @@ services:
       pushpin:
         condition: service_started
       valkey:
+        condition: service_started
+      libretranslate:
         condition: service_started
     command: ./scripts/selfhost-startup.sh
     environment:
@@ -110,6 +113,13 @@ services:
   valkey:
     restart: unless-stopped
     image: valkey/valkey
+  libretranslate: # Powers the EN/ES recipe translation toggle. Only exposed within the docker network.
+    container_name: recipesage_libretranslate
+    image: libretranslate/libretranslate:v1.7.2
+    command: ["--load-only", "en,es", "--disable-web-ui"]
+    volumes:
+      - libretranslatemodels:/home/libretranslate/.local
+    restart: unless-stopped
 
   # ===
   # Grocery Categorizer
@@ -126,4 +136,6 @@ volumes:
   apimedia:
     driver: local
   postgresdata:
+    driver: local
+  libretranslatemodels:
     driver: local
