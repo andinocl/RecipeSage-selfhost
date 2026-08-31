@@ -95,9 +95,7 @@ In this case, set `AI_PROVIDER` to `openai` and then set `AI_API_BASE_URL` to an
 
 ### Recipe Translation (EN/ES)
 
-Recipe viewing includes an EN/ES translation toggle, powered by a self-hosted [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) container (`libretranslate`). It runs fully offline (no API key, no cost) and only loads the English/Spanish models by default to keep resource usage down. Translations are cached per recipe/language and only recomputed when the recipe changes, so the `libretranslate` container is only queried the first time a given recipe is viewed in a given language.
-
-The `libretranslate` container downloads its language models on first startup, which can take a few minutes -- the translation toggle will show an error until that finishes. No action is needed on your part; just wait for the container to finish starting.
+Recipe viewing includes an EN/ES translation toggle, powered by the same AI provider as the other AI features above (`AI_PROVIDER`/`AI_API_KEY`, model set via `AI_MODEL_TRANSLATE`) -- no separate service or setup required. Translations are cached per recipe/language and only recomputed when the recipe changes, so a given recipe/language only costs API usage once. Like the other AI features, this is unavailable (the toggle will show an error) until `AI_API_KEY` is set.
 
 ### FAQ
 
@@ -120,8 +118,6 @@ The `pushpin` container is a broker for all websocket connections. Without it, a
 The `postgres` container is the database. The application cannot run without it.
 
 The `grocery-categorizer` container facilitates machine learning classification of ingredients, which is used to automatically categorize items into aisles within the shopping list feature. Without it the shopping list _will still work_, but will categorize everything as "Uncategorized". By default, I've configured this to use the cloud hosted version so that you don't have to run it locally.
-
-The `libretranslate` container powers the EN/ES recipe translation toggle. Without it, the translation toggle will show an error, but everything else works as normal.
 
 ## Changelog
 
