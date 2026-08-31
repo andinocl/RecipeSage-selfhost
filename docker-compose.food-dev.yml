@@ -1,0 +1,183 @@
+# Standalone stack for testing the EN/ES translation feature live at
+# food-dev.YOUR-DOMAIN, alongside your existing live instance on the same
+# host. Run it as its own compose project:
+#
+#   docker compose -f docker-compose.food-dev.yml -p food-dev up -d --build
+#
+# Matches your actual live topology rather than the stock RecipeSage-selfhost
+# template:
+# - Joins your existing `web`/`backend` docker networks (defined in your main
+#   compose file) instead of publishing its own port - Caddy reaches these
+#   containers by Compose service name, same as recipesage-api/-static.
+# - No bundled `proxy`/pushpin-routing container - Caddy does the /api/*
+#   split itself, matching your existing food.YOUR-DOMAIN block.
+# - LibreTranslate sits on `web` (not `backend`) since it needs internet
+#   access on first boot to download its en/es models; `backend` is
+#   internal-only.
+#
+# `api`/`static` build from the RecipeSage fork's translation-feature branch
+# instead of pulling a tagged image - see docker/selfhost-{api,static}.Dockerfile
+# in that repo, and the caveat about them in the PR description.
+#
+# RESOURCE NOTE: this adds roughly ~1.5GB of mem_limit budget on top of
+# whatever else is already running on this host - check `free -h` before
+# bringing it up. Tear down with
+# `docker compose -f docker-compose.food-dev.yml -p food-dev down -v` to
+# reclaim it when you're done testing.
+#
+# VERSION NOTE: your live instance is v3.0.10; this branch is based on
+# current (v4.0.3+). Between those, search backend and job-queue
+# infrastructure both changed - `prisma migrate deploy` should walk a
+# restored v3.0.10-era database through the full chain, but test with an
+# empty database first before restoring real data - see DEPLOY-FOOD-DEV.md.
+
+x-common-env: &common-env
+  API_PUBLIC_BASE_URL: https://food-dev.YOUR-DOMAIN/api
+
+  GRIP_KEY: ${recipesage_fooddev_secret}
+  POSTGRES_DB: recipesage_food_dev
+  POSTGRES_USER: recipesage_food_dev
+  POSTGRES_PASSWORD: ${recipesage_fooddev_pg_pwd}
+  DATABASE_URL: postgresql://recipesage_food_dev:${recipesage_fooddev_pg_pwd}@recipesage-fooddev-postgres:5432/recipesage_food_dev
+  GROCERY_CATEGORIZER_URL: https://grocery-categorizer.recipesage.com/
+  LIBRETRANSLATE_URL: http://recipesage-fooddev-libretranslate:5000/
+
+  # Fill these in the same way as your live instance (currently blank there
+  # too) if you want AI-powered import/scan features working here. Leave
+  # blank to skip.
+  AI_PROVIDER: "openrouter"
+  AI_API_KEY: ""
+  AI_API_BASE_URL: ""
+  AI_MODEL_WEBPAGE: google/gemini-2.5-flash-lite
+  AI_MODEL_TEXT: google/gemini-2.5-flash-lite
+  AI_MODEL_OCR: google/gemini-2.5-flash
+  AI_MODEL_DOCUMENT: google/gemini-2.5-flash
+  AI_MODEL_MODERATION: google/gemini-2.5-flash
+  AI_MODEL_VISION: anthropic/claude-sonnet-4.6
+  AI_MODEL_NUTRITION: google/gemini-2.5-flash-lite
+  AI_MODEL_ASSISTANT: anthropic/claude-sonnet-4.6
+  AI_MODEL_ASSISTANT_LOW: google/gemini-2.5-flash
+
+networks:
+  web:
+    external: true
+  backend:
+    external: true
+
+services:
+  recipesage-fooddev-static:
+    container_name: recipesage_fooddev_static
+    build:
+      context: https://github.com/andinocl/RecipeSage.git#claude/recipesage-en-es-translation-b7onyd
+      dockerfile: docker/selfhost-static.Dockerfile
+    restart: unless-stopped
+    networks:
+      - web
+    mem_limit: 128m
+
+  recipesage-fooddev-api:
+    container_name: recipesage_fooddev_api
+    build:
+      context: https://github.com/andinocl/RecipeSage.git#claude/recipesage-en-es-translation-b7onyd
+      dockerfile: docker/selfhost-api.Dockerfile
+      args:
+        VERSION: food-dev
+    depends_on:
+      recipesage-fooddev-postgres:
+        condition: service_healthy
+      recipesage-fooddev-pushpin:
+        condition: service_started
+      recipesage-fooddev-valkey:
+        condition: service_started
+      recipesage-fooddev-libretranslate:
+        condition: service_started
+    command: ./scripts/selfhost-startup.sh
+    environment:
+      <<: *common-env
+      ENVIRONMENT: selfhost
+      NODE_ENV: selfhost
+      NODE_OPTIONS: "--max-old-space-size=400"
+      MALLOC_ARENA_MAX: "2"
+      FILESYSTEM_STORAGE_PATH: /rs-media
+      STORAGE_TYPE: filesystem
+      VERBOSE: "false"
+      VERSION: food-dev
+      POSTGRES_HOST: recipesage-fooddev-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_SSL: "false"
+      POSTGRES_LOGGING: "false"
+      DATABASE_SSL: "false"
+      GRIP_URL: http://recipesage-fooddev-pushpin:5561/
+      JOB_QUEUE_REDIS_HOST: recipesage-fooddev-valkey
+      STRIPE_SK: ""
+      GCM_KEYPAIR: ""
+      SENTRY_DSN: ""
+      STRIPE_WEBHOOK_SECRET: ""
+    volumes:
+      - fooddev_apimedia:/rs-media
+    networks:
+      - web
+      - backend
+    restart: unless-stopped
+    mem_limit: 512m
+
+  recipesage-fooddev-pushpin:
+    container_name: recipesage_fooddev_pushpin
+    image: julianpoy/pushpin:2023-09-17
+    entrypoint: /bin/sh -c
+    command:
+      [
+        'sed -i "s/sig_key=changeme/sig_key=$$GRIP_KEY/" /etc/pushpin/pushpin.conf && echo "* $${TARGET},over_http" > /etc/pushpin/routes && pushpin --merge-output',
+      ]
+    environment:
+      <<: *common-env
+      TARGET: recipesage-fooddev-api:3000
+    networks:
+      - backend
+    restart: unless-stopped
+    mem_limit: 128m
+
+  recipesage-fooddev-postgres:
+    container_name: recipesage_fooddev_postgres
+    image: postgres:16
+    environment:
+      <<: *common-env
+    volumes:
+      - fooddev_postgresdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d recipesage_food_dev -U recipesage_food_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  recipesage-fooddev-valkey:
+    container_name: recipesage_fooddev_valkey
+    image: valkey/valkey
+    networks:
+      - backend
+    restart: unless-stopped
+    mem_limit: 128m
+
+  recipesage-fooddev-libretranslate:
+    container_name: recipesage_fooddev_libretranslate
+    image: libretranslate/libretranslate:v1.7.2
+    command: ["--load-only", "en,es", "--disable-web-ui"]
+    volumes:
+      - fooddev_libretranslatemodels:/home/libretranslate/.local
+    networks:
+      - web # needs internet on first boot to download models; `backend` has none
+    restart: unless-stopped
+    mem_limit: 512m
+
+volumes:
+  fooddev_apimedia:
+    name: fooddev_apimedia
+  fooddev_postgresdata:
+    name: fooddev_postgresdata
+  fooddev_libretranslatemodels:
+    name: fooddev_libretranslatemodels
