@@ -93,6 +93,10 @@ If none of the above apply, you can use almost any OpenAI-compatible alternative
 
 In this case, set `AI_PROVIDER` to `openai` and then set `AI_API_BASE_URL` to any OpenAI-compatible endpoint. See the OpenAI documentation for this -- _please_ do not open issues related to this -- I do not provide support for this. You will also need to change each `AI_MODEL_*` variable to a supported model name for the endpoint you chose.
 
+### Recipe Translation (EN/ES)
+
+Recipe viewing includes an EN/ES translation toggle, powered by the same AI provider as the other AI features above (`AI_PROVIDER`/`AI_API_KEY`, model set via `AI_MODEL_TRANSLATE`) -- no separate service or setup required. Translations are cached per recipe/language and only recomputed when the recipe changes, so a given recipe/language only costs API usage once. Like the other AI features, this is unavailable (the toggle will show an error) until `AI_API_KEY` is set.
+
 ### FAQ
 
 #### I'm seeing an "unexpected error occurred" error when trying to register

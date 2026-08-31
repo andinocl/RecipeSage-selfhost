@@ -26,6 +26,7 @@ x-common-env: &common-env
   AI_MODEL_NUTRITION: google/gemini-2.5-flash-lite # This model is recommended for this purpose
   AI_MODEL_ASSISTANT: anthropic/claude-sonnet-4.6 # Use whatever model you prefer
   AI_MODEL_ASSISTANT_LOW: google/gemini-2.5-flash # Use whatever model you prefer
+  AI_MODEL_TRANSLATE: google/gemini-2.5-flash-lite # Powers the EN/ES recipe translation toggle. Uses the same AI_API_KEY/AI_PROVIDER as the rest of the AI features above -- no separate setup needed, but each translation does cost API usage like the other AI features.
   SCRAPFLY_API_KEY: "" # Can be provided to bypass CloudFlare anti-bot for better clip from URL support. Or, just use the browser extension instead since that grabs the HTML directly from the active webpage.
 
 # === Please do not change any values below this line ===
