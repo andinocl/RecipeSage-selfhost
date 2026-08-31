@@ -20,19 +20,43 @@ container.
   history, but **test with an empty database first** (steps 1–4 below)
   before restoring your real data (step 5), so a migration hiccup shows up
   on throwaway data, not your backup.
-- **Resources**: this adds ~1.5GB of `mem_limit` budget on top of whatever
-  else is already running on this host. Check `free -h` first. Tear
-  down with `docker compose -f docker-compose.food-dev.yml -p food-dev down
-  -v` any time to reclaim it — nothing here touches your live stack's
-  containers, volumes, or networks.
+- **Resources**: `api`/`static` are pulled prebuilt from GHCR (see step 0) —
+  nothing is built on this host. Realistic added memory usage is roughly
+  ~250MB (Postgres + Valkey + pushpin + api + static; translation itself
+  goes through the AI provider, not a local service). Still worth a
+  `free -h` check first. Tear down with `docker compose -f
+  docker-compose.food-dev.yml -p food-dev down -v` any time to reclaim it —
+  nothing here touches your live stack's containers, volumes, or networks.
+- **Translation needs `AI_API_KEY` set** in `docker-compose.food-dev.yml`'s
+  `x-common-env` block (same key as your live instance would use, currently
+  blank there too) — without it, the EN/ES toggle will fail with an auth
+  error, though everything else works fine.
 - **The two Dockerfiles `api`/`static` build from
   (`docker/selfhost-api.Dockerfile` / `docker/selfhost-static.Dockerfile` in
   the `RecipeSage` fork) are a reconstruction, not the official image build
   pipeline** — I couldn't find where `julianpoy/recipesage-selfhost:api-vX`/
   `:static-vX` are actually built. I ran the underlying `nx` build commands
-  directly and they produce correct output, but the full `docker build` has
-  not been run end-to-end (this session's sandbox blocks Docker Hub pulls).
-  Treat step 3 below as the real first test and watch the logs.
+  directly and they produce correct output; the GitHub Actions workflow
+  that builds these into real images (`.github/workflows/build-food-dev-images.yml`
+  in `RecipeSage`) is the first time the full `docker build` has actually
+  run end-to-end — check its logs (Actions tab on the `RecipeSage` repo) if
+  the pulled images don't work as expected.
+
+## 0. Make sure the images are buildable/pullable
+
+`api`/`static` are built on GitHub's runners (`.github/workflows/build-food-dev-images.yml`
+in the `RecipeSage` fork) and pushed to `ghcr.io/andinocl/recipesage-selfhost-{api,static}:food-dev`,
+so nothing builds on this host. Two things to confirm once, before step 4:
+
+1. Check the workflow has run successfully at least once: Actions tab on
+   the `RecipeSage` repo, "Build food-dev images". If it hasn't run yet or
+   failed, that's the thing to fix first — send me the log.
+2. Check the packages are public (avoids needing to `docker login ghcr.io`
+   on this host): on GitHub, your profile → Packages → find
+   `recipesage-selfhost-api` and `recipesage-selfhost-static` → Package
+   settings → confirm visibility is Public. If they're private instead,
+   either flip that, or run `docker login ghcr.io` here with a personal
+   access token that has `read:packages` scope before step 4.
 
 ## 1. Secrets
 
@@ -76,15 +100,14 @@ block, which doesn't have one either.)
 ## 4. Bring up the stack (empty database first)
 
 ```bash
-docker compose -f docker-compose.food-dev.yml -p food-dev up -d --build
+docker compose -f docker-compose.food-dev.yml -p food-dev pull
+docker compose -f docker-compose.food-dev.yml -p food-dev up -d
 docker compose -f docker-compose.food-dev.yml -p food-dev logs -f
 ```
 
-This is the real test of the two reconstructed Dockerfiles — watch it
-rather than walking away. Expect: a several-minute `api`/`static` build
-from source, then `recipesage-fooddev-libretranslate` downloading its
-`en`/`es` models. If the build fails, send me the error rather than
-guessing further — that's exactly the scenario the caveat above flagged.
+Should come up quickly — just a pull plus starting containers, no build.
+If `pull` fails with an auth/403 error, that's the package-visibility thing
+from step 0.
 
 Once it's up, open `https://food-dev.YOUR-DOMAIN` — you should get a
 working, empty RecipeSage instance. Register a throwaway account and
