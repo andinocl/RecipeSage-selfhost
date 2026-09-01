@@ -26,6 +26,7 @@ x-common-env: &common-env
   AI_MODEL_NUTRITION: google/gemini-2.5-flash-lite # This model is recommended for this purpose
   AI_MODEL_ASSISTANT: anthropic/claude-sonnet-4.6 # Use whatever model you prefer
   AI_MODEL_ASSISTANT_LOW: google/gemini-2.5-flash # Use whatever model you prefer
+  AI_MODEL_TRANSLATE: google/gemini-2.5-flash-lite # Powers the EN/ES recipe translation toggle. Uses the same AI_API_KEY/AI_PROVIDER as the rest of the AI features above -- no separate setup needed, but each translation does cost API usage like the other AI features.
   SCRAPFLY_API_KEY: "" # Can be provided to bypass CloudFlare anti-bot for better clip from URL support. Or, just use the browser extension instead since that grabs the HTML directly from the active webpage.
 
 # === Please do not change any values below this line ===
@@ -43,11 +44,11 @@ services:
     restart: unless-stopped
   static: # Hosts frontend assets
     container_name: recipesage_static
-    image: julianpoy/recipesage-selfhost:static-v4.0.3
+    image: ghcr.io/andinocl/recipesage-selfhost-static:sha-477e97ae33ae43098f0e43bfb5a13ef6d0b54c33 # Custom build w/ EN/ES translation (andinocl/RecipeSage, claude/recipesage-en-es-translation-b7onyd). Replace with an official julianpoy/recipesage-selfhost:static-vX tag once/if this feature is upstreamed.
     restart: unless-stopped
   api: # Hosts backend API
     container_name: recipesage_api
-    image: julianpoy/recipesage-selfhost:api-v4.0.3
+    image: ghcr.io/andinocl/recipesage-selfhost-api:sha-477e97ae33ae43098f0e43bfb5a13ef6d0b54c33 # Custom build w/ EN/ES translation (andinocl/RecipeSage, claude/recipesage-en-es-translation-b7onyd). Replace with an official julianpoy/recipesage-selfhost:api-vX tag once/if this feature is upstreamed.
     depends_on:
       postgres:
         condition: service_healthy
